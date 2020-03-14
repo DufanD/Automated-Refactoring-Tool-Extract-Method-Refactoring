@@ -1,5 +1,7 @@
 package com.finalproject.automated.refactoring.tool.extract.method.refactoring.service.implementation;
 
+import com.finalproject.automated.refactoring.tool.duplicate.code.detection.model.CloneCandidate;
+import com.finalproject.automated.refactoring.tool.duplicate.code.detection.model.ClonePair;
 import com.finalproject.automated.refactoring.tool.extract.method.refactoring.model.AddCallExtractedMethodVA;
 import com.finalproject.automated.refactoring.tool.extract.method.refactoring.model.Candidate;
 import com.finalproject.automated.refactoring.tool.extract.method.refactoring.model.CheckExceptionVA;
@@ -77,6 +79,16 @@ public class ExtractMethodImpl implements ExtractMethod {
         } catch (Exception e) {
             return Boolean.FALSE;
         }
+    }
+
+    @Override
+    public Boolean refactoringForDuplicate(@NonNull String path, @NonNull ClonePair clonePair) {
+        try {
+            replaceFileForDuplicate(path, clonePair);
+        } catch (Exception e) {
+            return Boolean.FALSE;
+        }
+        return true;
     }
 
     private Boolean doRefactoring(String path, MethodModel methodModel) {
@@ -544,6 +556,47 @@ public class ExtractMethodImpl implements ExtractMethod {
         return replaceFileHelper.replaceFile(replaceFileVA);
     }
 
+    private void replaceFileForDuplicate(String path, ClonePair clonePair) {
+        CloneCandidate firstCandidate = clonePair.getCloneCandidates().get(0);
+        Candidate bestCandidate = candidateAnalysis.analysisForDuplicate(firstCandidate);
+
+        MethodModel candidateMethodModel = createMethodModelFromCandidate(firstCandidate.getMethodModel(), bestCandidate);
+        MethodModel remainingMethodModel = createRemainingMethodModel(firstCandidate.getMethodModel(), candidateMethodModel);
+
+        String target = methodModelHelper.createMethodRegex(firstCandidate.getMethodModel());
+        String replacement = createReplacementString(candidateMethodModel, remainingMethodModel);
+
+        ReplaceFileVA replaceFileVA = ReplaceFileVA.builder()
+                .filePath(path)
+                .target(target)
+                .replacement(replacement)
+                .build();
+
+        replaceFileHelper.replaceFile(replaceFileVA);
+        replaceClonePairsContent(path, candidateMethodModel, clonePair);
+    }
+
+    private void replaceClonePairsContent(String path, MethodModel candidateMethodModel, ClonePair clonePair) {
+        for (int i = 1; i < clonePair.getCloneCandidates().size(); i++) {
+            replaceFileEachCandidate(path, clonePair.getCloneCandidates().get(i), candidateMethodModel);
+        }
+    }
+
+    private Boolean replaceFileEachCandidate(String path, CloneCandidate cloneCandidate, MethodModel candidateMethodModel) {
+        MethodModel remainingMethodModel = createRemainingMethodModel(cloneCandidate.getMethodModel(), candidateMethodModel);
+
+        String target = methodModelHelper.createMethodRegex(cloneCandidate.getMethodModel());
+        String replacement = createReplacementStringRemainingOnly(remainingMethodModel);
+
+        ReplaceFileVA replaceFileVA = ReplaceFileVA.builder()
+                .filePath(path)
+                .target(target)
+                .replacement(replacement)
+                .build();
+
+        return replaceFileHelper.replaceFile(replaceFileVA);
+    }
+
     private String createReplacementString(MethodModel candidateMethodModel,
                                            MethodModel remainingMethodModel) {
         String candidateMethod = methodModelHelper.createMethod(candidateMethodModel);
@@ -553,6 +606,12 @@ public class ExtractMethodImpl implements ExtractMethod {
         remainingMethod = normalizeMethodString(remainingMethod);
 
         return buildReplacementString(candidateMethod, remainingMethod);
+    }
+
+    private String createReplacementStringRemainingOnly(MethodModel remainingMethodModel) {
+        String remainingMethod = methodModelHelper.createMethod(remainingMethodModel);
+        remainingMethod = normalizeMethodString(remainingMethod);
+        return remainingMethod;
     }
 
     private String normalizeMethodString(String method) {

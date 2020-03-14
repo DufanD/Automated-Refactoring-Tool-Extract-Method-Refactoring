@@ -1,5 +1,7 @@
 package com.finalproject.automated.refactoring.tool.extract.method.refactoring.service.implementation;
 
+import com.finalproject.automated.refactoring.tool.duplicate.code.detection.model.CloneCandidate;
+import com.finalproject.automated.refactoring.tool.duplicate.code.detection.model.ClonePair;
 import com.finalproject.automated.refactoring.tool.extract.method.refactoring.model.Candidate;
 import com.finalproject.automated.refactoring.tool.extract.method.refactoring.model.GetFilteredRawVariablesVA;
 import com.finalproject.automated.refactoring.tool.extract.method.refactoring.model.IsBlockCompleteVA;
@@ -71,6 +73,11 @@ public class CandidateAnalysisImpl implements CandidateAnalysis {
                 .flatMap(statements -> searchCandidates(methodModel, statements))
                 .filter(candidate -> isCandidateValid(methodModel, candidate))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public Candidate analysisForDuplicate(@NonNull CloneCandidate cloneCandidate) {
+        return buildCandidate(cloneCandidate.getMethodModel(), cloneCandidate.getStatements());
     }
 
     private List<List<StatementModel>> getAllBlocksMethod(MethodModel methodModel) {
