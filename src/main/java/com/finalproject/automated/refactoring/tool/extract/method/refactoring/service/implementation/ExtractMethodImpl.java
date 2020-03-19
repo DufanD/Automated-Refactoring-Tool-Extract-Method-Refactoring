@@ -414,6 +414,26 @@ public class ExtractMethodImpl implements ExtractMethod {
                 .build();
     }
 
+    private MethodModel createRemainingMethodModelForDuplicate(MethodModel methodModel,
+                                                               MethodModel extractedMethodModel,
+                                                               MethodModel removedMethodModel) {
+        BlockModel methodBlock = CandidateHelper.getMethodBlockStatement(methodModel.getStatements());
+        BlockModel candidateBlock = CandidateHelper.getMethodBlockStatement(removedMethodModel.getStatements());
+        BlockModel remainingBlock = CandidateHelper.getRemainingBlockModel(methodBlock, candidateBlock);
+
+        addCallExtractedMethodStatement(remainingBlock.getStatements(), extractedMethodModel);
+
+        return MethodModel.builder()
+                .keywords(methodModel.getKeywords())
+                .returnType(methodModel.getReturnType())
+                .name(methodModel.getName())
+                .parameters(methodModel.getParameters())
+                .exceptions(methodModel.getExceptions())
+                .body(createMethodBody(remainingBlock.getStatements()))
+                .statements(remainingBlock.getStatements())
+                .build();
+    }
+
     private void addCallExtractedMethodStatement(List<StatementModel> statements,
                                                  MethodModel extractedMethodModel) {
         Integer extractedStatementIndex = extractedMethodModel.getStatements()
@@ -583,7 +603,11 @@ public class ExtractMethodImpl implements ExtractMethod {
     }
 
     private Boolean replaceFileEachCandidate(String path, CloneCandidate cloneCandidate, MethodModel candidateMethodModel) {
-        MethodModel remainingMethodModel = createRemainingMethodModel(cloneCandidate.getMethodModel(), candidateMethodModel);
+        Candidate eachCandidate = candidateAnalysis.analysisForDuplicate(cloneCandidate);
+
+        MethodModel removedMethodModel = createMethodModelFromCandidate(cloneCandidate.getMethodModel(), eachCandidate);
+        MethodModel remainingMethodModel = createRemainingMethodModelForDuplicate(cloneCandidate.getMethodModel(),
+                candidateMethodModel, removedMethodModel);
 
         String target = methodModelHelper.createMethodRegex(cloneCandidate.getMethodModel());
         String replacement = createReplacementStringRemainingOnly(remainingMethodModel);

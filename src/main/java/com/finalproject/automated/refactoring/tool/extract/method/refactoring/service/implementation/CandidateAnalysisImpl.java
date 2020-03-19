@@ -1,7 +1,6 @@
 package com.finalproject.automated.refactoring.tool.extract.method.refactoring.service.implementation;
 
 import com.finalproject.automated.refactoring.tool.duplicate.code.detection.model.CloneCandidate;
-import com.finalproject.automated.refactoring.tool.duplicate.code.detection.model.ClonePair;
 import com.finalproject.automated.refactoring.tool.extract.method.refactoring.model.Candidate;
 import com.finalproject.automated.refactoring.tool.extract.method.refactoring.model.GetFilteredRawVariablesVA;
 import com.finalproject.automated.refactoring.tool.extract.method.refactoring.model.IsBlockCompleteVA;
