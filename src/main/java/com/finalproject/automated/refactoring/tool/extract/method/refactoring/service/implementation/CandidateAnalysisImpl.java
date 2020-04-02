@@ -76,7 +76,13 @@ public class CandidateAnalysisImpl implements CandidateAnalysis {
 
     @Override
     public Candidate analysisForDuplicate(@NonNull CloneCandidate cloneCandidate) {
-        return buildCandidate(cloneCandidate.getMethodModel(), cloneCandidate.getStatements());
+        Candidate candidate = buildCandidate(cloneCandidate.getMethodModel(), cloneCandidate.getStatements());
+
+        if (isBehaviourPreservationValid(cloneCandidate.getMethodModel(), candidate)) {
+            return candidate;
+        }
+
+        return Candidate.builder().build();
     }
 
     private List<List<StatementModel>> getAllBlocksMethod(MethodModel methodModel) {
