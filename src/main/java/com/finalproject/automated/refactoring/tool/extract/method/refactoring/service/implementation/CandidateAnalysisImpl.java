@@ -20,10 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -64,6 +61,9 @@ public class CandidateAnalysisImpl implements CandidateAnalysis {
     private static final Integer FIRST_INDEX = 0;
     private static final Integer SECOND_INDEX = 1;
 
+    private static final List<String> PRIMITIVE_TYPES = Arrays.asList("byte", "short", "int", "long", "float",
+            "double", "char", "boolean");
+
     @Override
     public List<Candidate> analysis(@NonNull MethodModel methodModel) {
         List<List<StatementModel>> blocksMethod = getAllBlocksMethod(methodModel);
@@ -79,10 +79,157 @@ public class CandidateAnalysisImpl implements CandidateAnalysis {
         Candidate candidate = buildCandidate(cloneCandidate.getMethodModel(), cloneCandidate.getStatements());
 
         if (isBehaviourPreservationValid(cloneCandidate.getMethodModel(), candidate)) {
+            candidateParameterValidation(cloneCandidate.getMethodModel(), candidate);
             return candidate;
         }
 
         return Candidate.builder().build();
+    }
+
+    private void candidateParameterValidation(MethodModel methodModel, Candidate candidate) {
+        List<VariablePropertyModel> paramVariables = filterLocalFromDeclaration(candidate.getLocalVariables(),
+                candidate);
+
+        List<String> globalVariables = candidate.getGlobalVariables()
+                .stream()
+                .filter(globalVariableCandidate ->
+                        isStillGlobalVariable(methodModel, globalVariableCandidate, paramVariables, candidate))
+                .collect(Collectors.toList());
+
+        candidate.setGlobalVariables(globalVariables);
+        candidate.getParameters().addAll(paramVariables);
+        candidate.getParameters().addAll(methodModel.getParameters());
+    }
+
+    private List<VariablePropertyModel> filterLocalFromDeclaration(List<VariablePropertyModel> localVariables,
+                                                                   Candidate candidate) {
+        return localVariables
+                .stream()
+                .filter(variable -> !isLocalVariableDeclaration(candidate, variable))
+                .collect(Collectors.toList());
+    }
+
+    private Boolean isStillGlobalVariable(MethodModel methodModel, String globalVariableCandidate,
+                                          List<VariablePropertyModel> localVariables, Candidate candidate) {
+        for (VariablePropertyModel localVariableMethod : methodModel.getLocalVariables()) {
+            if (isLocalVariableMethod(globalVariableCandidate, localVariableMethod)
+                    && !isLocalVariableDeclaration(candidate, localVariableMethod)) {
+                localVariables.add(localVariableMethod);
+                return Boolean.FALSE;
+            }
+        }
+
+        return Boolean.TRUE;
+    }
+
+    private Boolean isLocalVariableMethod(String globalVariableCandidate, VariablePropertyModel localVariableMethod) {
+        return localVariableMethod.getName().equals(globalVariableCandidate);
+    }
+
+    private Boolean isLocalVariableDeclaration(Candidate candidate, VariablePropertyModel localVariables) {
+        List<List<String>> rawVariablesContainsDeclaration = candidate.getRawVariables()
+                .stream()
+                .filter(rawVariables -> isContainsLocalVariable(localVariables, rawVariables))
+                .filter(this::isDeclaration)
+                .filter(rawVariables -> isLocalVariableBeforeAssignmentOperator(localVariables, rawVariables))
+                .collect(Collectors.toList());
+
+        return !rawVariablesContainsDeclaration.isEmpty();
+    }
+
+    private Boolean isContainsLocalVariable(VariablePropertyModel localVariables, List<String> rawVariables) {
+        List<String> filteredRawVariables =  rawVariables
+                .stream()
+                .filter(variable -> localVariables.getName().equals(variable))
+                .collect(Collectors.toList());
+
+        return !filteredRawVariables.isEmpty();
+    }
+
+    private Boolean isDeclaration(List<String> rawVariables) {
+        Boolean isDeclaration = Boolean.FALSE;
+
+        if (rawVariables.size() > SINGLE_LIST_SIZE) {
+            isDeclaration = searchDeclaration(rawVariables);
+        }
+
+        return isDeclaration;
+    }
+
+    private Boolean searchDeclaration(List<String> rawVariables) {
+        Boolean isDeclaration = Boolean.FALSE;
+
+        if (isContainsAssignmentOperators(rawVariables) && isContainsDataType(rawVariables)) {
+            isDeclaration = Boolean.TRUE;
+        }
+
+        return isDeclaration;
+    }
+
+    private Boolean isContainsDataType(List<String> rawVariables) {
+        Boolean isContainsDataType = Boolean.FALSE;
+
+        String firstVariable = rawVariables.get(FIRST_INDEX);
+
+        if (isContainsClassType(firstVariable) || isContainsPrimitiveType(firstVariable)) {
+            isContainsDataType = Boolean.TRUE;
+        }
+
+        return isContainsDataType;
+    }
+
+    private Boolean isContainsClassType(String variable) {
+        char firstCharacter = variable.charAt(FIRST_INDEX);
+
+        return Character.isUpperCase(firstCharacter);
+    }
+
+    private Boolean isContainsPrimitiveType(String variable) {
+        return  PRIMITIVE_TYPES
+                .stream()
+                .filter(getCleanedVariable(variable)::equals)
+                .count() >= 1;
+    }
+
+    private String getCleanedVariable(String variable) {
+        return variable.replaceAll("[^a-zA-Z0-9]","");
+    }
+
+    private Boolean isLocalVariableBeforeAssignmentOperator(VariablePropertyModel localVariables,
+                                                            List<String> rawVariables) {
+        Boolean isLocalVariableBeforeAssignmentOperator = Boolean.FALSE;
+
+        if (getLocalVariableIndex(localVariables, rawVariables) < getAssignmentOperatorIndex(rawVariables)) {
+            isLocalVariableBeforeAssignmentOperator = Boolean.TRUE;
+        }
+
+        return isLocalVariableBeforeAssignmentOperator;
+    }
+
+    private int getLocalVariableIndex(VariablePropertyModel localVariables, List<String> rawVariables) {
+        int index = 99;
+
+        for (String variable : rawVariables) {
+            if (variable.equals(localVariables.getName())) {
+                index = rawVariables.indexOf(variable);
+                break;
+            }
+        }
+
+        return index;
+    }
+
+    private int getAssignmentOperatorIndex(List<String> rawVariables) {
+        int index = 0;
+
+        for (String variable : rawVariables) {
+            if (isContainsAssignmentOperators(variable)) {
+                index = rawVariables.indexOf(variable);
+                break;
+            }
+        }
+
+        return index;
     }
 
     private List<List<StatementModel>> getAllBlocksMethod(MethodModel methodModel) {
@@ -347,6 +494,18 @@ public class CandidateAnalysisImpl implements CandidateAnalysis {
         if (statementModel instanceof BlockModel) {
             readBlockStatementIndex((BlockModel) statementModel, readStatementIndexVA);
         }
+    }
+
+    private Boolean isContainsAssignmentOperators(List<String> variables) {
+        Boolean isContainsAssignmentOperators = Boolean.FALSE;
+
+        for (String variable : variables) {
+            if (isContainsAssignmentOperators(variable)) {
+                isContainsAssignmentOperators = Boolean.TRUE;
+            }
+        }
+
+        return isContainsAssignmentOperators;
     }
 
     private Boolean isContainsAssignmentOperators(String variable) {
